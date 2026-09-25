@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express, { type Express, type Request, type Response } from 'express'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
@@ -37,9 +38,9 @@ app.get('/', (req: Request, res: Response) => {
 })
 
 app.post('/tool/:name', async (req, res) => {
-  console.log(req.params.name)
+  // console.log(req.params.name)
   const args = req.body
-  console.log(args)
+  // console.log(args)
   try {
     res.json({ result: await callPython(req.params.name, args) })
   } catch (e) {
