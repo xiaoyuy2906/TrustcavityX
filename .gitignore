@@ -7,8 +7,16 @@ dist
 __pycache__/
 *.pyc
 
-# 密钥
+# key
 .env
 
 # macOS
 .DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+/py/SiC1DCavity.ipynb

@@ -3,6 +3,6 @@ name = "py"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141.1",
-    "uvicorn>=0.52.4",
+    "ipykernel>=7.3.0",
+    "tidy3d>=2.12.0",
 ]
