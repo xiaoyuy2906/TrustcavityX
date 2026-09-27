@@ -20,3 +20,5 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 /py/SiC1DCavity.ipynb
+/py/HexagonalLatticeBands.ipynb
+/py/Bandstructure.ipynb

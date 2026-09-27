@@ -1,4 +1,7 @@
+import numpy as np
+import tidy3d as td
 from tidy3d import web
+
 
 def add(a: float, b: float) -> float:
     return a + b
