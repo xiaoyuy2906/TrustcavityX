@@ -73,6 +73,7 @@ def unitCellSim(n, wavelength, a, w, h, shape, hole_x, hole_y):
         sources=sources,
         monitors=monitors,
         run_time=800 / fwidth,
+        attrs={'target': td.C_0 / wavelength, 'f_lo': f_lo, 'f_hi': f_hi},  # read back by getUnitCellResult
         shutoff=0,
         boundary_spec=td.BoundarySpec(
             x=td.Boundary.bloch(0.5), y=td.Boundary.pml(), z=td.Boundary.pml()
@@ -96,8 +97,8 @@ def runTask(task_id):
 
 def getUnitCellResult(task_id):
     data = web.load(task_id, path=f"data/{task_id}.hdf5")
-    f0 = data.simulation.sources[0].source_time.freq0
-    res = ResonanceFinder(freq_window=(0.7 * f0, 1.75 * f0)).run(signals=data.data)
+    f0, f_lo, f_hi = (data.simulation.attrs[k] for k in ('target', 'f_lo', 'f_hi'))
+    res = ResonanceFinder(freq_window=(f_lo, f_hi)).run(signals=data.data)
     res = res.where(
         (abs(res.Q) > 100) & (res.amplitude > 0.001) & (res.error < 100), drop=True
     )
