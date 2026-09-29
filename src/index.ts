@@ -15,7 +15,8 @@ const client = new Anthropic({
 const workDir = process.cwd()
 const model = 'claude-sonnet-4-6'
 const max_tokens = 16000
-const system = 'You help the user run Tidy3D simulations of SiC nanobeam cavities.'
+const system = 'You help the user design 1D photonic crystal nanobeam cavities with Tidy3D simulations. ' +
+  'runTask spends FlexCredits: before calling it, tell the user the max cost from estimateUnitCell and wait for their OK.'
 
 const tools: Anthropic.Tool[] = [
   {
@@ -32,6 +33,44 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {}
+    }
+  },
+  {
+    name: 'estimateUnitCell',
+    description: 'Build a 1D nanobeam unit cell (one hole per period, Bloch kx = pi/a), upload it to Tidy3D, ' +
+      'and return its task_id and max FlexCredit cost. Free: nothing runs yet. All lengths in um.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        n: { type: 'number', description: 'refractive index of the beam material' },
+        wavelength: { type: 'number', description: 'target wavelength (um)' },
+        a: { type: 'number', description: 'lattice constant (um)' },
+        w: { type: 'number', description: 'beam width (um)' },
+        h: { type: 'number', description: 'beam thickness (um)' },
+        shape: { type: 'string', enum: ['circle', 'ellipse', 'rect'], description: 'hole shape; circle needs hole_x = hole_y' },
+        hole_x: { type: 'number', description: 'full hole width along the beam (um)' },
+        hole_y: { type: 'number', description: 'full hole width across the beam (um)' },
+      },
+      required: ['n', 'wavelength', 'a', 'w', 'h', 'shape', 'hole_x', 'hole_y']
+    }
+  },
+  {
+    name: 'runTask',
+    description: 'Run an uploaded Tidy3D task and wait until it finishes. Spends FlexCredits.',
+    input_schema: {
+      type: 'object',
+      properties: { task_id: { type: 'string' } },
+      required: ['task_id']
+    }
+  },
+  {
+    name: 'getUnitCellResult',
+    description: 'Band edges of a finished unit cell task at kx = pi/a: TE0 (dielectric band) and TE1 (air band) wavelengths, ' +
+      'mirror strength = min(f_TE1 - f0, f0 - f_TE0) / f0 (negative: target not in the gap), and every resonance found.',
+    input_schema: {
+      type: 'object',
+      properties: { task_id: { type: 'string' } },
+      required: ['task_id']
     }
   },
 ]
