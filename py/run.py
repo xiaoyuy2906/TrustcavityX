@@ -7,7 +7,7 @@ sys.stdout = sys.stderr  # everything printed from here on (tidy3d log, print) g
 import tools
 
 req = json.load(sys.stdin)
-# print( 'python: sys.stdin: ')
+# print('import tools ', tools)
 # print(req, file=sys.stderr)
 func = getattr(tools, req['tool'])
 out.write(json.dumps(func(**req['args']), default=str))

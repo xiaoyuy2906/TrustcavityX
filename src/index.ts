@@ -18,6 +18,12 @@ const max_tokens = 16000
 const system = 'You help the user design 1D photonic crystal nanobeam cavities with Tidy3D simulations. ' +
   'runTask spends FlexCredits: before calling it, tell the user the max cost from estimateUnitCell and wait for their OK.'
 
+
+
+
+
+
+
 const tools: Anthropic.Tool[] = [
   {
     name: 'getFlexCredit',
@@ -75,6 +81,10 @@ const tools: Anthropic.Tool[] = [
   },
 ]
 
+
+let costMap: Record<string, number> = {}
+
+
 // Tools run in Python behind the server that is already running (src/server.ts)
 async function runTool(name: string, args: Record<string, unknown>) {
   // axios.post(url, body, config). validateStatus: () => true treats every status as success,
@@ -84,11 +94,76 @@ async function runTool(name: string, args: Record<string, unknown>) {
     args,
     { validateStatus: () => true }
   )
+  console.log(res.data)
+
+  if (name == 'estimateUnitCell' && res.data.result) {
+    const { task_id, max_cost } = res.data.result
+    costMap[task_id] = max_cost
+  }
   return res.data
 }
 
 
-async function agentLoop(messages: Anthropic.MessageParam[]) {
+
+
+const permissionRules = [
+  {
+    tools: ['runTask'],
+    check: async (input: Record<string, unknown>) => {
+      const [allowance, credits] = await Promise.all([runTool('getAllowance', {}), runTool('getFlexCredit', {})])
+      const cost = costMap[input.task_id as string]
+      return cost < (allowance.result.left + credits.result.left)
+    },
+    message: (input: Record<string, unknown>) => `Running ${input.task_id} costs up to ${costMap[input.task_id as string]} FlexCredits`,
+    warning: 'Denied: not enough allowance/credits for this task, or it was not estimated with estimateUnitCell first.'
+  },
+]
+
+
+
+// true when the user types y/yes
+async function askUser(name: string, input: Record<string, unknown>, reason: string, rl: readline.Interface) {
+  console.log(`Claude (${new Date().toISOString()}) >> ${reason}`)
+  console.log(`Claude (${new Date().toISOString()}) >> ${name}(${JSON.stringify(input)})`)
+  const choice = await rl.question(`You (${new Date().toISOString()}) >> Allow? [y/N] `)
+  return ['y', 'yes'].includes(choice.trim().toLowerCase())
+}
+
+
+async function checkRules(name: string, input: Record<string, unknown>) {
+  for await (const rule of permissionRules) {
+    if (rule.tools.includes(name)) {
+      let checkResult = await rule.check(input)
+      return checkResult ? { message: rule.message(input) } : { warning: rule.warning }
+    }
+  }
+}
+
+
+// Why the tool call is denied (sent to Claude as the tool result), or undefined when it may run
+async function checkPermission(name: string, input: Record<string, unknown>, rl: readline.Interface) {
+  const reason = await checkRules(name, input)
+
+  if (!reason) {
+    return undefined
+  }
+
+  if ('warning' in reason) {
+    return reason.warning
+  }
+
+  const allowed = await askUser(name, input, reason.message, rl)
+  if (allowed) {
+    return undefined
+  } else {
+    return 'Denied by the user.'
+  }
+}
+
+
+
+
+async function agentLoop(messages: Anthropic.MessageParam[], rl: readline.Interface) {
   let response = await client.messages.create({
     model,
     max_tokens,
@@ -108,19 +183,40 @@ async function agentLoop(messages: Anthropic.MessageParam[]) {
 
 
     console.log(`Claude (${new Date().toISOString()}) >> running the tool: ` + toolUse.name)
-    const result = await runTool(toolUse.name, toolUse.input as Record<string, unknown>)
 
-    messages.push({ role: 'assistant', content: response.content });
-    messages.push({
-      role: 'user',
-      content: [
-        {
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: JSON.stringify(result),
-        },
-      ],
-    });
+
+
+    const denied = await checkPermission(toolUse.name, toolUse.input as Record<string, unknown>, rl)
+
+    if (denied) {
+      messages.push({ role: 'assistant', content: response.content })
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: denied,
+          },
+        ],
+      })
+
+    } else {
+      const result = await runTool(toolUse.name, toolUse.input as Record<string, unknown>)
+
+      messages.push({ role: 'assistant', content: response.content })
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify(result),
+          },
+        ],
+      })
+    }
+
 
     response = await client.messages.create({
       model,
@@ -161,7 +257,7 @@ async function main() {
       break
     }
     msgHistory.push({ role: 'user', content: input })
-    await agentLoop(msgHistory).catch((e) => console.error(String(e)))
+    await agentLoop(msgHistory, rl).catch((e) => console.error(String(e)))
   }
 
   rl.close()
